@@ -1,0 +1,614 @@
+---
+title: "Code"
+author: "LZH,LZY"
+date: "1/24/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## 1.Simulations Part
+
+### 1.1 Discussion of Lasso Effect
+
+#### 1.1.1 Good at Sparse Structure
+```{r}
+cal_plot1 <- function(n =50,p=30,p1=10,sigma,cor=0.5){
+set.seed(1)
+beta1 <- c(1,1,4,5,1,4,0.1,1.9,1.8,3)
+require(glmnet)
+require(pls)
+require(pcr)
+require(plsdof)
+len <- length(p1)
+ols = numeric(len)
+lasso = numeric (len)
+ridge = numeric(len)
+pcr = numeric(len)
+for (s in 1:len)
+{ 
+  if (len >1){
+   p0 = p1[s]
+  }else{
+   p0 =p1
+  }
+  beta_true <- numeric(length = p)
+  beta_true[1:p0] <- rep(beta1,length.out = p0)
+  Sigma_true <- matrix(nrow = p, ncol = p)
+  for (i in 1:p) {
+      for (j in 1:p) {
+          Sigma_true[i,j] <- cor ** abs(i-j)
+          # 0**0 == 1
+      }
+  }
+  X <- mvrnorm(n,mu = rep(0,p),Sigma = Sigma_true)
+  y = X%*%beta_true + rnorm(n,mean = 0,sd = 1)
+  lasso[s] = min(cv.glmnet(X,y,alpha=1)$cvm)
+  ridge[s] = min(cv.glmnet(X,y,alpha=0)$cvm)
+  pcr[s]= min(pcr.cv(X=X,y=y)$cv.error)
+  }
+result <- list(lasso = lasso,ridge=ridge,pcr=pcr) 
+}
+ls <- seq(10,100,10)/100
+re <-cal_plot1(n=200,p =100,p1=ls*100,cor=0.5)
+print(re)
+#pdf("new_diff_p.eps", width=6, height=4)
+plot(ls,y=re$ridge,type="l",col="blue",lwd=2,xlab = "Sparsity p1/p",ylab = "Cross Vaildation Error",ylim=c(0,10))
+lines(ls,y=re$pcr,col="purple",lwd=2)
+lines(ls,y=re$lasso,col="red",lwd=2)
+legend("topleft", c("Lasso","Ridge","PCR"), col = c("red","blue","purple"),lwd=2)
+#dev.off()
+
+```
+
+#### 1.1.2 Stay Stable when p>n 
+```{r}
+cal_plot1 <- function(n =50,p1=30,sigma,cor=0.5){
+set.seed(1)
+beta1 <- c(1,1,4,5,1,4,0.1,1.9,1.8,3)
+require(glmnet)
+require(pls)
+require(pcr)
+require(plsdof)
+len <- length(p1)
+ols = numeric(len)
+lasso = numeric (len)
+ridge = numeric(len)
+pcr = numeric(len)
+for (s in 1:len)
+{ 
+  if (len >1){
+   p = p1[s]
+  }else{
+    p =p1
+  }
+  beta_true <- numeric(length = p)
+  beta_true[1:length(beta1)] <- beta1
+  Sigma_true <- matrix(nrow = p, ncol = p)
+  for (i in 1:p) {
+      for (j in 1:p) {
+          Sigma_true[i,j] <- cor ** abs(i-j)
+          # 0**0 == 1
+      }
+  }
+  X <- mvrnorm(n,mu = rep(0,p),Sigma = Sigma_true)
+  y = X%*%beta_true + rnorm(n,mean = 0,sd = 1)
+  lasso[s] = min(cv.glmnet(X,y,alpha=1)$cvm)
+  ridge[s] = min(cv.glmnet(X,y,alpha=0)$cvm)
+  pcr[s]= min(pcr.cv(X=X,y=y)$cv.error)
+  }
+result <- list(lasso = lasso,ridge=ridge,pcr=pcr) 
+}
+ls <- seq(10,200,5)
+re <-cal_plot1(n=100,p1 = ls,cor=0.5)
+
+print(re)
+#pdf("new_diff_p.eps", width=6, height=4)
+plot(ls,y=re$ridge,type="l",col="blue",lwd=2,xlab = "Feature Dimension: p",ylab = "Cross Vaildation Error")
+lines(ls,y=re$pcr,col="purple",lwd=2)
+lines(ls,y=re$lasso,col="red",lwd=2)
+legend("topleft", c("Lasso","Ridge","PCR"), col = c("red","blue","purple"),lwd=2)
+#dev.off()
+```
+
+
+#### 1.1.3 Able to Deal with Non-sparse Structure
+
+```{r}
+cal_plot2 <- function(n1 =50,p=30,beta1= c(rep(2,p/2),rep(4,p/2)),sigma,cor=0.5){
+set.seed(2)
+#beta1 <- c(2,4,3,1,0.5,3,21,2,5,11,2,3,0.2,0.4)
+#beta1 <- c(2,4,3,5)
+require(glmnet)
+require(plsdof)
+require(pls)
+len <- length(n1)
+ols = numeric(len)
+lasso = numeric (len)
+ridge = numeric(len)
+pcr = numeric(len)
+for (s in 1:len)
+{ 
+  if (len >1){
+    n = n1[s]
+  }else{
+    n =n1
+  }
+  beta_true <- numeric(length = p)
+  beta_true[1:length(beta1)] <- beta1
+  Sigma_true <- matrix(nrow = p, ncol = p)
+  for (i in 1:p) {
+      for (j in 1:p) {
+          Sigma_true[i,j] <- cor ** abs(i-j)
+          # 0**0 == 1
+      }
+  }
+  X <- mvrnorm(n,mu = rep(0,p),Sigma = Sigma_true)
+  y = X%*%beta_true + rnorm(n,mean = 0,sd = 1)
+  lasso[s] = min(cv.glmnet(X,y,alpha=1)$cvm)
+  ridge[s] = min(cv.glmnet(X,y,alpha=0)$cvm)
+  pcr[s] = min(pcr.cv(X=X,y=y)$cv.error)
+    index <- sample(rep(1:10,length = n))
+    cv.err <- 0
+    for (k in 1:10){
+      X1 <- X[index!=k,];y1<- y[index!=k]
+      X2 <- X[index==k,];y2<- y[index==k]
+      b_hat <- ginv(t(X1)%*%X1)%*%t(X1)%*%y1
+      cv.err <- cv.err +sum((X2%*%b_hat-y[index==k])**2)
+    }
+  ols[s] = cv.err/10
+  }
+result <- list(lasso = lasso,ridge=ridge,pcr=pcr,ols=ols) 
+}
+#a1 <- cal_plot2(n1 = seq(100,400,20),p = 50)
+#a2 <- cal_plot2(beta1 = beta2,p = 50,n1 = seq(100,400,20))
+#print(a1)
+#print(a2)
+#print(cal_plot2(p=10,n1 = seq(100,400,20)))
+
+ls = seq(100,400,20)
+re <- cal_plot2(n1 = ls, p = 50)
+print(re)
+#pdf("diff_n.pdf", width=6, height=4)
+#layout(matrix(c(1,2),1,2))
+#plot(ls,y=re$ols,type="l",col="green",lwd=2,xlab = "Sample Size: n",ylab = "Cross Vaildation Error")
+plot(ls,y=re$ridge,type="l",col="blue",lwd=2,xlab = "Sample Size: n",ylab = "Cross Vaildation Error",ylim = c(0,12))
+#lines(ls,y=re$ridge,col="blue",lwd=2)
+lines(ls,y=re$lasso,col="red",lwd=2)
+lines(ls,y=re$pcr,col="purple",lwd=2)
+#legend("bottomright", c("Lasso","Ridge","OLS","PCR"), col = c("red","blue","green","purple"),lwd=2)
+legend("topright", c("Lasso","Ridge","PCR"), col = c("red","blue","purple"),lwd=2)
+#dev.off()
+```
+
+### 1.2 Discussion of Solving Lasso 
+
+Generate data
+```{r}
+require(MASS)
+p = 90
+set.seed(1)
+n = 150
+beta1 <- c(1,1,4,5,1,4,1,1,4)
+#beta1 <- rep(beta0,3)
+beta_true <- numeric(length = p)
+beta_true[1:length(beta1)] <- beta1
+Sigma_true <- matrix(nrow = p, ncol = p)
+for (i in 1:p) {
+    for (j in 1:p) {
+        Sigma_true[i,j] <- 0.5 ** abs(i-j)
+      }
+}
+X <- mvrnorm(n,mu = rep(0,p),Sigma = Sigma_true)
+y = X%*%beta_true + rnorm(n,mean = 0,sd = 1)
+```
+
+Naive Update and Cor Update of soft_thresholding
+```{r}
+positive <- function(x){
+  if(x>0){
+    y = x
+  }
+  else{
+    y = 0
+  }
+  return(y)
+}
+ols <-function(alpha,lambda,A,dimension,y){
+  #Just gradient
+  p <- length(alpha)
+  j <- dimension
+  y_hat <- numeric(length = length(y))
+  for (i in length(y_hat)){
+    y_hat[i] <- sum(A[i,]%*%alpha) - A[i,j]*alpha[j]
+  }
+  return(sum(t(A[,j]%*%(y - y_hat)))/length(y))
+}
+
+lasso.soft_thresholding_Naive <-function(alpha,lambda,A,dimension,y,a0,ATA){
+  n <- length(y) 
+  j <- dimension
+  #term1 <- sum(A[,i]*y)
+  term <- 0
+  for (i in 1:n){
+    r = y[i] - (A%*%alpha)[i]
+    term = term + A[i,j]*r
+  }
+  term = term/n + sum(A[,j]^2)*alpha[j]/n -sum(A[,j])*a0/n
+  #term <- ((term1-term2)+sum(A[,i]^2)*alpha[i]-sum(A[,i])*a0)/n
+  factor <- sum((A^2)[,j])/n
+  
+  if(abs(term) <= lambda){
+    update = 0
+  }else if(term>0){
+    update <- (term - lambda)/factor
+  }else{
+    update <- (term + lambda)/factor                                           
+  }
+  return(update)
+}
+
+
+lasso.soft_thresholding_Cov <- function(alpha,lambda,A,dimension,y,a0,ATA =ATA,gamma=1,...){
+  n <- length(y) 
+  i <- dimension
+  term1 <- sum(A[,i]*y)
+  term2 <- 0
+  for (k in which(alpha>0)){
+      term2 = term2 + ATA[k,i]*alpha[k]
+  }
+  term <- ((term1-term2)+sum(A[,i]^2)*alpha[i]-sum(A[,i])*a0)/n
+  factor <- sum((A^2)[,i])/n
+  
+  if(abs(term) <= lambda*gamma){
+    update = 0
+  }else if(term>0){
+    update <- (term - lambda*gamma)/(factor +lambda *(1-gamma))
+  }else{
+    update <- (term + lambda*gamma)/(factor +lambda *(1-gamma))                                           
+  }
+  return(update)
+}
+
+  
+```
+huber loss
+```{r}
+lasso.huberloss <- function(alpha,lambda,A,dimension,y,tau=2){
+  i <- dimension
+  #tau <- 2
+  term <- 2*(A%*%alpha-y)
+  term <- as.vector(term)
+  term1 <- sum(A[,i]*term)
+  if (abs(alpha[i])<tau){
+    term2 <- alpha[i]/tau
+  }else{
+    term2 <- sign(alpha[i])*lambda
+  }
+  
+  return(term1+term2)
+}
+```
+Coordinate Descent
+```{r CD_each_iter}
+CD_each_iter <- function(A,y,lambda,step0 = 0.1,max_iter = 100,method =1,factor_index = 0,eps = 1e-7,...)
+  {
+  t1 <- proc.time()
+  result = numeric(length = max_iter)
+  p <- dim(A)[2]
+  n <- dim(A)[1]
+  alpha <- numeric(p)
+  alpha1<- numeric(p)
+  alpha_mark <- rep(1,p)
+  a0 <- 0
+  #截距
+  # A,y are given data
+  iter <- 0
+  
+  while(iter < max_iter ){
+  iter <- iter+1
+  ATA = t(A)%*%A
+  
+  for ( i in 1:p){
+    if(method == 1){
+      #subgradient method
+      update <- lasso.subgrad(alpha = alpha,dimension =i ,A =A,y=y-a0,lambda = lambda)
+      alpha[i] <- alpha[i] - step0*update/inverses
+      ### Delete Now
+    }else if(method ==2){
+      # Huber loss
+      update <- lasso.huberloss(alpha = alpha,dimension =i ,A =A,y=y-a0,lambda = lambda,tau=0.5/(iter))
+      alpha[i] <- alpha[i] - step0*update/(iter**(2))
+    }else if(method == 3){
+      #soft_threshold
+      alpha[i] <- lasso.soft_thresholding_Cov(alpha = alpha,dimension =i ,A =A,y=y,lambda = lambda,a0 = a0,gamma = 1,ATA = ATA)
+    }else if(method ==  4){
+      alpha[i] <- lasso.soft_thresholding_Naive(alpha = alpha,dimension =i ,A =A,y=y,lambda = lambda,a0 = a0,ATA = ATA)
+    }
+  }
+  a0 <- mean(y - A%*%alpha)  
+  result[iter] <- sum((A%*%alpha -y+a0)**2)/(length(y)^2)
+  if(all(abs(alpha-alpha_mark)<eps)){
+      break
+    }
+  alpha_mark <- alpha
+  }
+
+  alpha1 <- alpha
+  # Record the result
+  t2 <- proc.time()
+  t = t2 -t1
+  print("Iterations:")
+  print(iter)
+  return (list(beta = alpha,loss = result[iter],t = t[3][[1]],a0 =a0))
+}
+
+```
+Proximal gradient Descent
+```{r}
+prox_grad <- function(max_iter,lambda,A,y,eps = 1e-6){
+  p <- dim(A)[2]
+  n <- dim(A)[1]
+  alpha <- numeric(p)
+  alpha1<- numeric(p)
+  alpha_mark <- rep(1,p)
+  L = svd(t(A)%*%A)$d[1]
+  t1 <- proc.time()
+  a0 = 0
+  iter <- 0
+  #browser()
+  result = numeric(length = max_iter)
+  while(iter<max_iter){
+    alpha1 <- alpha
+    yita <- alpha - 1/(n*L) * t(A)%*%(A%*%alpha - (y-a0))
+    alpha <- sign(yita) * sapply(abs(yita)-1/L * lambda, FUN = positive)
+    a0 <- mean(y - A%*%alpha) 
+    iter <- iter +1
+    result[iter] <- sum((A%*%alpha -y+a0)**2)/(length(y)^2)
+    
+    if(all(abs(alpha-alpha_mark)<eps)){
+      break
+    }
+    alpha_mark <- alpha
+  }
+   
+  t2 <- proc.time()
+  t = t2 -t1
+  return(list(beta = alpha,loss = result[iter],t = t[3][[1]],a0 =a0))
+}
+```
+Get Result
+```{r}
+l=0.5
+Max_iter = 10000#For we use eps to stop calculating
+eps = 1e-6
+set.seed(1)
+
+  print("Lasso-huber loss")
+  result_huber <- CD_each_iter(A=X,y=y,lambda = l,step0 = 0.0025,max_iter = Max_iter,method = 2,eps = eps)
+  print("loss :")
+  print(result_huber$loss)
+  print("time :")
+  print(result_huber$t)
+  print(length(which(abs(result_huber$beta)>0)))
+  print("Lasso-naive")
+  result_nai <- CD_each_iter(A=X,y=y,lambda = l,step0 = 0.5,max_iter = Max_iter,method = 4,eps = eps)
+  print("loss :")
+  print(result_nai$loss)
+  print("time:")
+  print(result_nai$t)
+  print("Support set")
+  print(length(which(abs(result_nai$beta)>0)))
+result_thre <- CD_each_iter(A=X,y=y,lambda = l,step0 = 0.5,max_iter = Max_iter,method = 3,eps = eps)
+print("Lasso-Cov")
+print("loss :")
+print(result_thre$loss)
+print("time:")
+print(result_thre$t)
+print("Support set")
+print(length(which(abs(result_thre$beta)>0)))
+
+result_thre <- prox_grad(A=X,y=y,lambda = l,max_iter =Max_iter,eps = eps)
+print("PG")
+print("loss :")
+print(result_thre$loss)
+print("time:")
+print(result_thre$t)
+print("Support set")
+print(length(which(abs(result_thre$beta)>0)))
+
+require(glmnet)
+t1 <- proc.time()
+m <- glmnet(X,y,lambda = l,maxit = Max_iter,thresh = eps)
+print("Lasso-glmnet")
+print("loss :")
+print(sum((X%*%m$beta - y +m$a0)**2)/(length(y)^2))
+print("Support set")
+print(length(which(abs(m$beta)>0)))
+print("time:")
+t2<- proc.time()
+t = t2 -t1
+print(t[3][[1]])
+
+t1 <- proc.time()
+m2 <- glmnet(X,y,lambda = l,maxit = Max_iter,alpha = 0,thresh = eps)
+print("Ridge-glmnet")
+print("loss :")
+print(sum((X%*%m2$beta - y +m2$a0)**2)/(length(y)^2))
+print("Support set")
+print(length(which(abs(m2$beta)>0)))
+print("time:")
+t2<- proc.time()
+t = t2 -t1
+print(t[3][[1]])
+
+```
+
+## 2. Experiment On Real Data
+
+### 2.1 mushrooms
+
+```{r}
+mushrooms <- readLines("https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/mushrooms")
+```
+
+```{r}
+require(plsdof)
+require(pls)
+require(glmnet)
+set.seed(1)
+A.mushrooms <- matrix(0,nrow = 8124, ncol = 112)
+y.mushrooms <- numeric(length = 112)
+a <- strsplit(mushrooms, split = " ")
+for(i in 1:8124){
+  b <- a[[i]]
+  y.mushrooms[i] <- as.numeric(b[1])
+  b <- b[-1]
+  len <- length(b)
+  c <- strsplit(b,split = ":")
+  for(j in 1:len){
+    colind <- c[[j]][1]
+    val <- c[[j]][2]
+    colind <- as.numeric(colind)
+    val <- as.numeric(val)
+    A.mushrooms[i,colind] <- val
+  }
+}
+
+
+```
+
+```{r}
+set.seed(1)
+t0 <- proc.time()
+lasso1 <- cv.glmnet(x = A.mushrooms, y = y.mushrooms,alpha = 1)
+t1 <- proc.time()
+min(lasso1$cvm)
+index <- which.min(lasso1$cvm)
+nzero <- lasso1$nzero
+sup <- nzero[index]
+t_lasso <- t1 - t0
+print("time")
+t_lasso[[3]]
+print("support set")
+sup[[1]]
+```
+
+```{r}
+set.seed(1)
+t0 <- proc.time()
+pcr1 <- pcr.cv(X = A.mushrooms, y = y.mushrooms)
+t1 <- proc.time()
+min(pcr1$cv.error)
+t_pcr <- t1 - t0
+print("time")
+t_pcr[[3]]
+print("support set")
+length(which(pcr1$coefficients>0))
+```
+
+```{r}
+set.seed(1)
+t0 <- proc.time()
+ridge1 <- cv.glmnet(x = A.mushrooms, y = y.mushrooms, alpha = 0)
+t1 <- proc.time()
+min(ridge1$cvm)
+index1 <- which.min(ridge1$cvm)
+nzero1 <- ridge1$nzero
+sup1 <- nzero1[index1]
+t_ridge <- t1 - t0
+print("time")
+t_ridge[[3]]
+print("support set")
+sup1[[1]]
+```
+
+### 2.2 rcv1
+
+```{r rcv1_A&y}
+rcv1 <- readLines("rcv1_train.binary")
+set.seed(100)
+ind <- sample(1:20242, 8000)
+feature <- sample(1:50000, 300)
+feature <- as.character(sort(feature))
+rcv1 <- rcv1[ind]
+A.rcv1 <- matrix(0,nrow = 8000, ncol = 300)
+colnames(A.rcv1) <- feature
+y.rcv1 <- numeric(length = 8000)
+a <- strsplit(rcv1, split = " ")
+for(i in 1:8000){
+  b <- a[[i]]
+  y.rcv1[i] <- as.numeric(b[1])
+  b <- b[-1]
+  len <- length(b)
+  c <- strsplit(b,split = ":")
+  #browser()
+  for(j in 1:len){
+    colind <- c[[j]][1]
+    if(sum(colind==feature)==1){
+      val <- c[[j]][2]
+      val <- as.numeric(val)
+      A.rcv1[i,colind] <- val
+    }
+  }
+}
+```
+remove rows and columns that are full of 0 in A.rcv1
+```{r pre_process_rcv1}
+rs<-apply(A.rcv1,1,sum)
+A.rcv1 <- A.rcv1[which(rs!=0),]
+y.rcv1 <- y.rcv1[which(rs!=0)]
+cs <- apply(A.rcv1,2,sum)
+A.rcv1 <- A.rcv1[,which(cs!=0)]
+```
+
+```{r}
+set.seed(1)
+t0 <- proc.time()
+lasso2 <- cv.glmnet(x = A.rcv1,y = y.rcv1,alpha = 1)
+t1 <- proc.time()
+min(lasso2$cvm)
+index2 <- which.min(lasso2$cvm)
+nzero2 <- lasso2$nzero
+sup2 <- nzero2[index2]
+t_lasso1 <- t1 - t0
+print("time")
+t_lasso1[[3]]
+print("support set")
+sup2[[1]]
+```
+
+```{r}
+set.seed(1)
+t0 <- proc.time()
+pcr2 <- pcr.cv(X = A.rcv1, y = y.rcv1)
+t1 <- proc.time()
+min(pcr.cv(X = A.rcv1, y = y.rcv1)$cv.error)
+t_pcr1 <- t1 - t0
+print("time")
+t_pcr1[[3]]
+print("support set")
+length(which(abs(pcr2$coefficients)>0))
+```
+
+```{r}
+set.seed(1)
+t0 <- proc.time()
+ridge2 <- cv.glmnet(x = A.rcv1,y = y.rcv1, alpha = 0)
+t1 <- proc.time()
+min(ridge2$cvm)
+index3 <- which.min(ridge2$cvm)
+nzero3 <- ridge2$nzero
+sup3 <- nzero3[index3]
+t_ridge1 <- t1 - t0
+print("time")
+t_ridge1[[3]]
+print("support set")
+sup3[[1]]
+```
